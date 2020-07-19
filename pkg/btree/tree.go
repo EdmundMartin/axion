@@ -8,14 +8,14 @@ import (
 	"sync/atomic"
 )
 
-
 const numberOfItemsBeforeMultithread = 10
 
 type Blink struct {
+	Name                     string
 	Root                     *node
 	lock                     sync.RWMutex
 	Number, Ary, NumRoutines uint64
-	TreeType KeyType
+	TreeType                 KeyType
 }
 
 func (blink *Blink) insert(key Key, stack *nodes) Key {
@@ -119,6 +119,65 @@ func (blink *Blink) Get(keys ...Key) Keys {
 	return found
 }
 
+func (blink *Blink) Scan() Keys {
+	// Take left path down tree
+	node := blink.Root
+	for node != nil && node.IsLeaf == false {
+		if len(node.Nodes) > 0 {
+			node = node.Nodes[0]
+		} else {
+			node = nil
+		}
+	}
+	keys := make(Keys, 0)
+	for node != nil && node.IsLeaf {
+		keys = append(keys, node.Keys...)
+		if node.Right != nil {
+			node = node.Right
+		} else {
+			node = nil
+		}
+	}
+	return keys
+}
+
+func (blink *Blink) GreaterThan(searchKey Key) Keys {
+	if blink.TreeType != searchKey.Type {
+		return []Key{}
+	}
+	node := blink.Root
+	for node != nil && node.IsLeaf == false {
+		found := false
+		for idx, value := range node.Keys {
+			if found == false && searchKey.Compare(value) == -1 {
+				found = true
+				node = node.Nodes[idx]
+				break
+			}
+		}
+		if found == false {
+			node = nil
+		}
+	}
+	keys := make(Keys, 0)
+	for node != nil && node.IsLeaf {
+		copyIdx := 0
+		for idx, k := range node.Keys {
+			if searchKey.Compare(k) == -1 {
+				copyIdx = idx
+				break
+			}
+		}
+		keys = append(keys, node.Keys[copyIdx:]...)
+		if node.Right != nil {
+			node = node.Right
+		} else {
+			node = nil
+		}
+	}
+	return keys
+}
+
 func (blink *Blink) Print() {
 	fmt.Println(`PRINTING B-LINK`)
 	if blink.Root == nil {
@@ -128,10 +187,9 @@ func (blink *Blink) Print() {
 	blink.Root.print()
 }
 
-func NewTree(ary, numRoutines uint64, treeType KeyType) *Blink {
-	return &Blink{Ary: ary, NumRoutines: numRoutines, TreeType: treeType}
+func NewTree(name string, ary, numRoutines uint64, treeType KeyType) *Blink {
+	return &Blink{Name: name, Ary: ary, NumRoutines: numRoutines, TreeType: treeType}
 }
-
 
 func (blink *Blink) Serialize(treeName string) error {
 	dataFile, err := os.OpenFile(fmt.Sprintf("%s.gob", treeName), os.O_CREATE|os.O_WRONLY|os.O_APPEND, os.ModePerm)
